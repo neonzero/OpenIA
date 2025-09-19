@@ -13,3 +13,4 @@ function validateControl(input) {
 }
 
 module.exports = { ControlSchema, validateControl };
+

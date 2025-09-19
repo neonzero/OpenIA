@@ -63,5 +63,6 @@ describe('RiskEngine', () => {
     const updates = eventBus.published.filter((event) => event.event === 'risk_updated');
     expect(updates.length).toBeGreaterThan(0);
     expect(updates[0].payload.id).toBe(risk.id);
+
   });
 });

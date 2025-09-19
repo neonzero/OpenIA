@@ -128,5 +128,6 @@ describe('API integration', () => {
     expect(login.response.status).toBe(200);
     expect(typeof login.body.token).toBe('string');
     expect(login.body.token.length).toBeGreaterThan(5);
+
   });
 });

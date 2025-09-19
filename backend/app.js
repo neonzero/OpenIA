@@ -83,6 +83,7 @@ function createApp(options = {}) {
     cache,
     openApiDocument,
   };
+
 }
 
 module.exports = { createApp };

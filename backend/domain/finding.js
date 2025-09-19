@@ -15,3 +15,4 @@ function validateFinding(input) {
 }
 
 module.exports = { FindingSchema, validateFinding };
+

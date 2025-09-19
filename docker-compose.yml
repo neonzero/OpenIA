@@ -1,0 +1,107 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./services/backend
+    command: ["bash", "-c", "echo 'Backend container ready. Attach to run the API.' && tail -f /dev/null"]
+    environment:
+      DATABASE_URL: postgres://openia:openia@db:5432/openia
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BROKERS: kafka:9092
+      STORAGE_CONFIG: /app/config/storage.yml
+    volumes:
+      - ./:/workspace:delegated
+    working_dir: /workspace
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: ./services/backend
+    command: ["bash", "-c", "echo 'Worker container idle. Override command to run background jobs.' && tail -f /dev/null"]
+    environment:
+      DATABASE_URL: postgres://openia:openia@db:5432/openia
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./:/workspace:delegated
+    working_dir: /workspace
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./services/frontend
+    command: ["bash", "-c", "echo 'Frontend container ready. Install dependencies and start your dev server.' && tail -f /dev/null"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./services/frontend:/app
+    working_dir: /app
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: openia
+      POSTGRES_USER: openia
+      POSTGRES_PASSWORD: openia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d openia -U openia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    build:
+      context: ./infrastructure/storage/docker/redis
+    ports:
+      - "6379:6379"
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: bitnami/kafka:3.6
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=1
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  postgres_data:

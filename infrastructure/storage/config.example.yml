@@ -1,0 +1,43 @@
+# Configuration template for infrastructure services
+# Copy to config.yml and adjust values as needed.
+
+database:
+  host: localhost
+  port: 5432
+  name: openia
+  user: openia
+  password: change_me
+  sslmode: disable
+
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  password: null
+
+kafka:
+  brokers:
+    - localhost:9092
+  client_id: openia-local
+  security_protocol: PLAINTEXT
+
+storage:
+  provider: s3  # or "azure_blob"
+  s3:
+    bucket: openia-local
+    region: us-east-1
+    access_key_id: your_access_key
+    secret_access_key: your_secret
+    endpoint_url: http://localhost:4566
+  azure_blob:
+    account_name: your_account
+    account_key: your_key
+    container: openia-local
+    endpoint_suffix: core.windows.net
+
+files:
+  max_upload_size_mb: 100
+  allowed_content_types:
+    - application/pdf
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - image/png
