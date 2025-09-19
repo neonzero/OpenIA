@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Node modules
+node_modules/
+
+# Local environment files
+infrastructure/storage/config.yml
+
+# Docker artifacts
+*.log
