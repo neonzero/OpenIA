@@ -1,48 +1,68 @@
-const RiskEngine = require('../services/RiskEngine');
-const eventBus = require('../mq/eventBus');
+const { describe, it, expect, beforeEach } = require('./jest-lite');
+const RiskEngine = require('../services/riskEngine');
+const COSOService = require('../services/coso');
+const EventBus = require('../mq/eventBus');
+
+function createRepository() {
+  const store = new Map();
+  return {
+    async getAllRisks() {
+      return Array.from(store.values());
+    },
+    async getRiskById(id) {
+      return store.get(id) || null;
+    },
+    async createRisk(risk) {
+      store.set(risk.id, risk);
+      return risk;
+    },
+    async updateRisk(risk) {
+      store.set(risk.id, risk);
+      return risk;
+    },
+  };
+}
 
 describe('RiskEngine', () => {
   let repository;
+  let eventBus;
   let riskEngine;
 
   beforeEach(() => {
-    repository = {
-      findAll: jest.fn(),
-      create: jest.fn().mockImplementation(async (risk) => ({ id: '123', ...risk })),
-      update: jest.fn().mockImplementation(async (id, risk) => ({ id, ...risk }))
-    };
-    riskEngine = new RiskEngine({ riskRepository: repository });
-    eventBus.emitter.removeAllListeners();
+    repository = createRepository();
+    eventBus = new EventBus();
+    const coso = new COSOService();
+    const coreIntegration = { syncRisk: async () => ({}) };
+    riskEngine = new RiskEngine({ riskRepository: repository, eventBus, coreIntegration, coso });
   });
 
-  test('createRisk persists risk and emits risk_created', async () => {
-    const payload = {
-      title: 'Data breach',
-      description: 'Potential data leak',
-      category: 'Cyber',
-      severity: 'high',
-      controls: []
-    };
-
-    const eventPromise = new Promise((resolve) => {
-      eventBus.subscribe('risk_created', resolve);
+  it('calculates residual score when creating risks', async () => {
+    const risk = await riskEngine.createRisk({
+      title: 'Vendor Reliability',
+      description: 'Assess third-party uptime risk',
+      owner: 'Risk Manager',
+      inherentImpact: 4,
+      inherentLikelihood: 4,
+      controls: [
+        { name: 'Vendor assessment', owner: 'Procurement', status: 'effective' },
+      ],
     });
 
-    const created = await riskEngine.createRisk(payload);
-    expect(created.id).toBe('123');
-    const event = await eventPromise;
-    expect(event.id).toBe('123');
-    expect(repository.create).toHaveBeenCalled();
+    expect(risk.residualScore).toBe(15);
   });
 
-  test('updateRisk emits risk_updated message', async () => {
-    const eventPromise = new Promise((resolve) => {
-      eventBus.subscribe('risk_updated', resolve);
+  it('publishes an event when updating a risk', async () => {
+    const risk = await riskEngine.createRisk({
+      title: 'Cybersecurity',
+      description: 'Threat of ransomware attack',
+      owner: 'CISO',
     });
 
-    await riskEngine.updateRisk('123', { severity: 'medium' });
-    const event = await eventPromise;
-    expect(event.id).toBe('123');
-    expect(repository.update).toHaveBeenCalledWith('123', { severity: 'medium' });
+    await riskEngine.updateRisk(risk.id, { status: 'mitigated' });
+
+    const updates = eventBus.published.filter((event) => event.event === 'risk_updated');
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates[0].payload.id).toBe(risk.id);
+
   });
 });

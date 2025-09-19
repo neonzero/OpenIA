@@ -1,8 +1,15 @@
 const { createApp } = require('./app');
 
-const app = createApp();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
-app.listen(port, () => {
-  console.log(`OpenIA backend listening on port ${port}`);
+const { app } = createApp();
+
+const server = app.listen(PORT, () => {
+  console.log(`Backend services listening on port ${PORT}`);
+});
+
+process.on('SIGINT', () => {
+  server.close(() => {
+    process.exit(0);
+  });
 });
