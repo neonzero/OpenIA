@@ -12,6 +12,44 @@ function createAuditRouter({ auditEngine, feedbackService }) {
     }
   });
 
+  router.get('/timesheets', async (req, res, next) => {
+    try {
+      const { auditor } = req.query;
+      const entries = await auditEngine.listTimesheets({ auditor });
+      res.json(entries);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/timesheets', async (req, res, next) => {
+    try {
+      const entry = await auditEngine.recordTimesheet(req.body);
+      res.status(201).json(entry);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/working-papers', async (req, res, next) => {
+    try {
+      const { auditId } = req.query;
+      const papers = await auditEngine.listWorkingPapers({ auditId });
+      res.json(papers);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/working-papers/:id', async (req, res, next) => {
+    try {
+      const updated = await auditEngine.updateWorkingPaper(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/', async (req, res, next) => {
     try {
       const created = await auditEngine.planAudit(req.body);
@@ -22,6 +60,15 @@ function createAuditRouter({ auditEngine, feedbackService }) {
   });
 
   router.put('/:id', async (req, res, next) => {
+    try {
+      const updated = await auditEngine.updateAudit(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/:id', async (req, res, next) => {
     try {
       const updated = await auditEngine.updateAudit(req.params.id, req.body);
       res.json(updated);

@@ -3,6 +3,9 @@ const { createRedis } = require('./config/cache');
 const RiskRepository = require('./repositories/RiskRepository');
 const AuditRepository = require('./repositories/AuditRepository');
 const ReportRepository = require('./repositories/ReportRepository');
+const TimesheetRepository = require('./repositories/TimesheetRepository');
+const WorkingPaperRepository = require('./repositories/WorkingPaperRepository');
+const FollowUpRepository = require('./repositories/FollowUpRepository');
 const RiskEngine = require('./services/RiskEngine');
 const AuditEngine = require('./services/AuditEngine');
 const FeedbackService = require('./services/Feedback');
@@ -19,9 +22,15 @@ function buildContainer(overrides = {}) {
   const riskRepository = overrides.riskRepository || new RiskRepository({ pool, cache });
   const auditRepository = overrides.auditRepository || new AuditRepository({ pool, cache });
   const reportRepository = overrides.reportRepository || new ReportRepository({ pool, cache });
+  const timesheetRepository = overrides.timesheetRepository || new TimesheetRepository({ pool });
+  const workingPaperRepository =
+    overrides.workingPaperRepository || new WorkingPaperRepository({ pool });
+  const followUpRepository = overrides.followUpRepository || new FollowUpRepository({ pool });
 
-  const riskEngine = overrides.riskEngine || new RiskEngine({ riskRepository });
-  const auditEngine = overrides.auditEngine || new AuditEngine({ auditRepository });
+  const riskEngine = overrides.riskEngine || new RiskEngine({ riskRepository, followUpRepository });
+  const auditEngine =
+    overrides.auditEngine ||
+    new AuditEngine({ auditRepository, timesheetRepository, workingPaperRepository });
   const feedbackService = overrides.feedbackService || new FeedbackService({ auditRepository });
 
   const coreIntegration =
@@ -38,6 +47,9 @@ function buildContainer(overrides = {}) {
     riskRepository,
     auditRepository,
     reportRepository,
+    timesheetRepository,
+    workingPaperRepository,
+    followUpRepository,
     riskEngine,
     auditEngine,
     feedbackService,

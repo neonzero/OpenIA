@@ -6,18 +6,28 @@ class CoreIntegration {
   }
 
   async generateRiskReport() {
-    const [risks, audits] = await Promise.all([
-      this.riskEngine.listRisks(),
+    const [riskSummary, audits] = await Promise.all([
+      this.riskEngine.getSummary(),
       this.auditEngine.listAudits()
     ]);
 
-    const summary = {
-      totalRisks: risks.length,
-      highSeverityRisks: risks.filter((risk) => risk.severity === 'high').length,
-      plannedAudits: audits.filter((audit) => audit.status === 'planned').length
-    };
+    const statusBuckets = audits.reduce(
+      (acc, audit) => {
+        const key = audit.status || 'planned';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      },
+      { planned: 0, 'in-progress': 0, complete: 0 }
+    );
 
-    return summary;
+    return {
+      generatedAt: new Date().toISOString(),
+      riskSummary,
+      auditOverview: {
+        total: audits.length,
+        byStatus: statusBuckets
+      }
+    };
   }
 
   async persistReport(content) {
