@@ -1,24 +1,51 @@
-const { z } = require('../lib/zod');
 
-const { FindingSchema } = require('./finding');
+const { z } = require('zod');
 
-const AuditEngagementSchema = z.object({
-  id: z.string().uuid().optional(),
-  title: z.string().min(3, 'Audit title is required'),
-  objective: z.string().min(5, 'Audit objective must be at least 5 characters'),
-  leadAuditor: z.string().min(1, 'Lead auditor is required'),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  status: z.enum(['planned', 'in_progress', 'completed']).default('planned'),
-  riskIds: z.array(z.string().uuid()).default([]),
-  findings: z.array(FindingSchema).default([]),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+const statusEnum = z.enum(['planned', 'in-progress', 'complete']);
+
+const dateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+  message: 'Invalid date format'
 });
 
-function validateAuditEngagement(input) {
-  return AuditEngagementSchema.parse(input);
+const AuditEngagementSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).transform((value) => value.toString()).optional(),
+    title: z.string().min(1),
+    owner: z.string().min(1),
+    startDate: dateSchema,
+    endDate: dateSchema,
+    status: statusEnum.default('planned'),
+    scope: z.string().optional(),
+    description: z.string().optional()
+  })
+  .refine((value) => new Date(value.endDate) >= new Date(value.startDate), {
+    message: 'End date must be after the start date',
+    path: ['endDate']
+  });
+
+const AuditEngagementUpdateSchema = AuditEngagementSchema.pick({
+  owner: true,
+  startDate: true,
+  endDate: true,
+  status: true,
+  scope: true,
+  description: true,
+  title: true
+})
+  .partial()
+  .refine((value) => {
+    if (!value.startDate || !value.endDate) {
+      return true;
+    }
+    return new Date(value.endDate) >= new Date(value.startDate);
+  }, {
+    message: 'End date must be after the start date',
+    path: ['endDate']
+  });
+
+function createAuditEngagement(input) {
+  const parsed = AuditEngagementSchema.parse(input);
+  return parsed;
 }
 
-module.exports = { AuditEngagementSchema, validateAuditEngagement };
-
+module.exports = { AuditEngagementSchema, AuditEngagementUpdateSchema, createAuditEngagement };

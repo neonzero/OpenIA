@@ -1,24 +1,92 @@
-const { z } = require('../lib/zod');
 
-const { ControlSchema } = require('./control');
+const { z } = require('zod');
 
-const RiskSchema = z.object({
-  id: z.string().uuid().optional(),
-  title: z.string().min(3, 'Risk title must have at least 3 characters'),
-  description: z.string().min(5, 'Risk description must have at least 5 characters'),
-  category: z.enum(['strategic', 'financial', 'operational', 'compliance']).default('operational'),
-  inherentImpact: z.number().min(1).max(5).default(3),
-  inherentLikelihood: z.number().min(1).max(5).default(3),
-  residualScore: z.number().min(0).max(25).optional(),
-  owner: z.string().min(1, 'Risk owner is required'),
-  controls: z.array(ControlSchema).default([]),
-  status: z.enum(['open', 'mitigated', 'closed']).default('open'),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+const riskStatusEnum = z.enum(['open', 'mitigated', 'closed']);
+
+const scoreSchema = z.preprocess((value) => {
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return value;
+}, z.number().min(1).max(25));
+
+const dateSchema = z
+  .string()
+  .optional()
+  .refine((value) => !value || !Number.isNaN(Date.parse(value)), {
+    message: 'Invalid date value'
+  });
+
+const RiskInputSchema = z.object({
+  title: z.string().min(1),
+  category: z.string().min(1),
+  owner: z.string().min(1),
+  inherentRisk: scoreSchema,
+  residualRisk: scoreSchema.optional(),
+  status: riskStatusEnum.default('open'),
+  description: z.string().optional(),
+  appetite: scoreSchema.optional(),
+  reportedOn: dateSchema
 });
 
-function validateRisk(input) {
-  return RiskSchema.parse(input);
+const RiskUpdateSchema = RiskInputSchema.partial();
+
+const QuestionnaireResponsesSchema = z.object({
+  owner: z.string().min(1),
+  riskCategory: z.string().min(1),
+  likelihood: scoreSchema,
+  impact: scoreSchema,
+  description: z.string().min(1),
+  controls: z.string().optional()
+});
+
+const RiskQuestionnaireSchema = z.object({
+  riskId: z.string().optional(),
+  responses: QuestionnaireResponsesSchema
+});
+
+const RiskFiltersSchema = z.object({
+  status: riskStatusEnum.optional(),
+  owner: z.string().optional()
+});
+
+function createRisk(input) {
+  const parsed = RiskInputSchema.parse(input);
+  return {
+    ...parsed,
+    residualRisk: parsed.residualRisk ?? parsed.inherentRisk
+  };
 }
 
-module.exports = { RiskSchema, validateRisk };
+function updateRisk(input) {
+  return RiskUpdateSchema.parse(input);
+}
+
+function createRiskFromQuestionnaire(input) {
+  const { responses } = RiskQuestionnaireSchema.parse(input);
+  const inherentRisk = Number(responses.likelihood) * Number(responses.impact);
+  const title = `${responses.riskCategory} risk - ${responses.owner}`;
+  return {
+    title,
+    category: responses.riskCategory,
+    owner: responses.owner,
+    inherentRisk,
+    residualRisk: inherentRisk,
+    status: 'open',
+    description: responses.description
+  };
+}
+
+module.exports = {
+  riskStatusEnum,
+  RiskFiltersSchema,
+  RiskInputSchema,
+  RiskQuestionnaireSchema,
+  RiskUpdateSchema,
+  createRisk,
+  createRiskFromQuestionnaire,
+  updateRisk
+};

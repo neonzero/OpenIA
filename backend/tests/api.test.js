@@ -4,12 +4,59 @@ const { createApp } = require('../app');
 let server;
 let baseUrl;
 
-async function request(path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, options);
-  const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json') ? await response.json() : await response.text();
-  return { response, body };
-}
+
+  beforeEach(() => {
+    const user = { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'admin' };
+    container = {
+      authService: {
+        login: jest.fn().mockResolvedValue({ token: 'abc', user }),
+        refresh: jest.fn(),
+        getCurrentUser: jest.fn().mockResolvedValue(user)
+      },
+      riskEngine: {
+        listRisks: jest
+          .fn()
+          .mockResolvedValue([{ id: '1', title: 'Risk', category: 'IT', inherentRisk: 16, residualRisk: 12, owner: 'Owner', status: 'open' }]),
+        createRisk: jest.fn().mockResolvedValue({ id: '2', title: 'New risk' }),
+        updateRisk: jest.fn().mockResolvedValue({ id: '2', status: 'mitigated' }),
+        getSummary: jest.fn().mockResolvedValue({
+          totalRisks: 1,
+          highRisks: 1,
+          mediumRisks: 0,
+          lowRisks: 0,
+          trend: []
+        }),
+        listFollowUps: jest.fn().mockResolvedValue([]),
+        submitQuestionnaire: jest.fn().mockResolvedValue({ id: '3', title: 'Questionnaire risk' })
+      },
+      auditEngine: {
+        listAudits: jest.fn().mockResolvedValue([{ id: '1', title: 'Audit', owner: 'Lead', startDate: '2024-01-01', endDate: '2024-01-31', status: 'planned' }]),
+        planAudit: jest.fn().mockResolvedValue({ id: '2', status: 'planned' }),
+        updateAudit: jest.fn().mockResolvedValue({ id: '2', status: 'in-progress' }),
+        listTimesheets: jest.fn().mockResolvedValue([{ id: '1', auditor: 'Alex', date: '2024-03-01', hours: 4, engagement: 'ENG-1' }]),
+        recordTimesheet: jest.fn().mockResolvedValue({ id: '2', auditor: 'Alex', date: '2024-03-01', hours: 4, engagement: 'ENG-1' }),
+        listWorkingPapers: jest.fn().mockResolvedValue([]),
+        updateWorkingPaper: jest.fn().mockResolvedValue({ id: '5', status: 'review' })
+      },
+      feedbackService: {
+        submitFeedback: jest.fn().mockResolvedValue({ engagementId: '1', rating: 5, comment: 'Great' })
+      },
+      reportService: {
+        listReports: jest
+          .fn()
+          .mockResolvedValue([{ id: '1', title: 'Summary', owner: 'Owner', issuedDate: '2024-01-01', status: 'draft' }]),
+        getReport: jest.fn().mockResolvedValue({ id: '1', title: 'Summary', owner: 'Owner', issuedDate: '2024-01-01', status: 'draft' }),
+        generateReport: jest.fn().mockResolvedValue({ id: '1', title: 'Summary', owner: 'Owner', issuedDate: '2024-01-01', status: 'issued' })
+      },
+      coreIntegration: {
+        generateRiskReport: jest.fn().mockResolvedValue({
+          generatedAt: new Date().toISOString(),
+          riskSummary: { totalRisks: 1, highRisks: 1, mediumRisks: 0, lowRisks: 0 },
+          auditOverview: { total: 1, byStatus: { planned: 1 } }
+        })
+      }
+    };
+
 
 describe('API integration', () => {
   beforeEach(() => {
@@ -19,10 +66,25 @@ describe('API integration', () => {
     baseUrl = `http://127.0.0.1:${port}`;
   });
 
-  afterEach(async () => {
-    if (server) {
-      await new Promise((resolve) => server.close(resolve));
-    }
+
+  test('POST /auth/login returns token and user', async () => {
+    const response = await request(app)
+      .post('/auth/login')
+      .send({ email: 'admin@example.com', password: 'password123' });
+    expect(response.status).toBe(200);
+    expect(response.body.token).toBe('abc');
+    expect(response.body.user.email).toBe('admin@example.com');
+    expect(container.authService.login).toHaveBeenCalledWith({ email: 'admin@example.com', password: 'password123' });
+  });
+
+  test('GET /auth/me returns current user', async () => {
+    const response = await request(app)
+      .get('/auth/me')
+      .set('Authorization', 'Bearer abc');
+    expect(response.status).toBe(200);
+    expect(response.body.email).toBe('admin@example.com');
+    expect(container.authService.getCurrentUser).toHaveBeenCalledWith('abc');
+
   });
 
   it('serves an OpenAPI document', async () => {
@@ -32,102 +94,42 @@ describe('API integration', () => {
     expect(!!body.paths['/risks']).toBeTruthy();
   });
 
-  it('creates, updates, and lists risks', async () => {
-    const riskPayload = {
-      title: 'Data Privacy',
-      description: 'Potential breach of personal data',
-      owner: 'CISO',
-      inherentImpact: 5,
-      inherentLikelihood: 4,
-      controls: [
-        { name: 'Access Control', owner: 'Security', status: 'effective' },
-      ],
-    };
 
-    const creation = await request('/risks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(riskPayload),
-    });
-    expect(creation.response.status).toBe(201);
-    const createdRisk = creation.body.data;
-    expect(createdRisk.title).toBe('Data Privacy');
-
-    const update = await request(`/risks/${createdRisk.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'mitigated' }),
-    });
-    expect(update.response.status).toBe(200);
-    expect(update.body.data.status).toBe('mitigated');
-
-    const list = await request('/risks');
-    expect(list.response.status).toBe(200);
-    expect(Array.isArray(list.body.data)).toBeTruthy();
-    expect(list.body.data.length).toBeGreaterThan(0);
+  test('GET /risks/summary returns aggregated metrics', async () => {
+    const response = await request(app).get('/risks/summary');
+    expect(response.status).toBe(200);
+    expect(response.body.totalRisks).toBe(1);
   });
 
-  it('plans audits and exposes aggregated reports with feedback', async () => {
-    const riskPayload = {
-      title: 'Regulatory Compliance',
-      description: 'Monitor compliance with new regulation',
-      owner: 'Compliance Lead',
-    };
-    const { body: riskBody } = await request('/risks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(riskPayload),
-    });
-    const riskId = riskBody.data.id;
-
-    const auditPayload = {
-      title: 'Compliance Readiness',
-      objective: 'Assess regulatory controls',
-      leadAuditor: 'Jane Auditor',
-      riskIds: [riskId],
-    };
-    const auditResult = await request('/audits', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(auditPayload),
-    });
-    expect(auditResult.response.status).toBe(201);
-    const auditId = auditResult.body.data.id;
-
-    const findingResult = await request(`/audits/${auditId}/findings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Policy Gap',
-        description: 'Documented policy missing approval.',
-        severity: 'medium',
-      }),
-    });
-    expect(findingResult.response.status).toBe(200);
-
-    const feedbackResult = await request('/reports/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Report looks good' }),
-    });
-    expect(feedbackResult.response.status).toBe(201);
-
-    const report = await request('/reports');
-    expect(report.response.status).toBe(200);
-    expect(report.body.data.totalRisks).toBeGreaterThan(0);
-    expect(report.body.data.totalAudits).toBeGreaterThan(0);
-    expect(report.body.data.feedback.length).toBeGreaterThan(0);
+  test('POST /audits plans audit and returns 201', async () => {
+    const response = await request(app)
+      .post('/audits')
+      .send({ title: 'New Audit', owner: 'Owner', startDate: '2024-05-01', endDate: '2024-05-15', status: 'planned' });
+    expect(response.status).toBe(201);
+    expect(container.auditEngine.planAudit).toHaveBeenCalled();
   });
 
-  it('authenticates users', async () => {
-    const login = await request('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'analyst', password: 'secret' }),
-    });
-    expect(login.response.status).toBe(200);
-    expect(typeof login.body.token).toBe('string');
-    expect(login.body.token.length).toBeGreaterThan(5);
+  test('GET /audits/timesheets retrieves entries', async () => {
+    const response = await request(app).get('/audits/timesheets');
+    expect(response.status).toBe(200);
+    expect(container.auditEngine.listTimesheets).toHaveBeenCalled();
+  });
 
+  test('POST /audits/:id/feedback delegates to feedback service', async () => {
+    const response = await request(app).post('/audits/1/feedback').send({ rating: 5, comment: 'Great' });
+    expect(response.status).toBe(201);
+    expect(container.feedbackService.submitFeedback).toHaveBeenCalledWith({ engagementId: '1', rating: 5, comment: 'Great' });
+  });
+
+  test('GET /reports/summary returns aggregated metrics', async () => {
+    const response = await request(app).get('/reports/summary');
+    expect(response.status).toBe(200);
+    expect(response.body.riskSummary.totalRisks).toBe(1);
+  });
+
+  test('POST /reports/:id/generate triggers report service', async () => {
+    const response = await request(app).post('/reports/1/generate');
+    expect(response.status).toBe(201);
+    expect(container.reportService.generateReport).toHaveBeenCalledWith('1');
   });
 });
