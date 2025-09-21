@@ -1,7 +1,30 @@
-const RiskEngine = require('../services/RiskEngine');
-const eventBus = require('../mq/eventBus');
+const { describe, it, expect, beforeEach } = require('./jest-lite');
+const RiskEngine = require('../services/riskEngine');
+const COSOService = require('../services/coso');
+const EventBus = require('../mq/eventBus');
+
+function createRepository() {
+  const store = new Map();
+  return {
+    async getAllRisks() {
+      return Array.from(store.values());
+    },
+    async getRiskById(id) {
+      return store.get(id) || null;
+    },
+    async createRisk(risk) {
+      store.set(risk.id, risk);
+      return risk;
+    },
+    async updateRisk(risk) {
+      store.set(risk.id, risk);
+      return risk;
+    },
+  };
+}
 
 describe('RiskEngine', () => {
+
   let riskRepository;
   let followUpRepository;
   let riskEngine;
@@ -57,10 +80,13 @@ describe('RiskEngine', () => {
     expect(event.title).toBe('Data breach');
   });
 
-  test('updateRisk emits risk_updated message', async () => {
-    const eventPromise = new Promise((resolve) => {
-      eventBus.subscribe('risk_updated', resolve);
+  it('publishes an event when updating a risk', async () => {
+    const risk = await riskEngine.createRisk({
+      title: 'Cybersecurity',
+      description: 'Threat of ransomware attack',
+      owner: 'CISO',
     });
+
 
     await riskEngine.updateRisk('123', { residualRisk: 8, status: 'mitigated' });
     expect(riskRepository.updateRisk).toHaveBeenCalledWith('123', { residualRisk: 8, status: 'mitigated' });

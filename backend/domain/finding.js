@@ -1,16 +1,18 @@
-const { z } = require('zod');
+const { z } = require('../lib/zod');
 
 const FindingSchema = z.object({
   id: z.string().uuid().optional(),
-  title: z.string().min(1),
-  description: z.string().min(1),
-  severity: z.enum(['low', 'medium', 'high']),
+  title: z.string().min(1, 'Finding title is required'),
+  description: z.string().min(1, 'Finding description is required'),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   remediation: z.string().optional(),
-  status: z.enum(['open', 'in_progress', 'closed']).default('open')
+  owner: z.string().optional(),
+  dueDate: z.string().optional(),
 });
 
-function createFinding(input) {
+function validateFinding(input) {
   return FindingSchema.parse(input);
 }
 
-module.exports = { FindingSchema, createFinding };
+module.exports = { FindingSchema, validateFinding };
+

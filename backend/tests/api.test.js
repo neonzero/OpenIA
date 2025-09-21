@@ -1,9 +1,9 @@
-const request = require('supertest');
+const { describe, it, expect, beforeEach, afterEach } = require('./jest-lite');
 const { createApp } = require('../app');
 
-describe('API contract tests', () => {
-  let app;
-  let container;
+let server;
+let baseUrl;
+
 
   beforeEach(() => {
     const user = { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'admin' };
@@ -57,8 +57,15 @@ describe('API contract tests', () => {
       }
     };
 
-    app = createApp(container);
+
+describe('API integration', () => {
+  beforeEach(() => {
+    const { app } = createApp();
+    server = app.listen(0);
+    const { port } = server.address();
+    baseUrl = `http://127.0.0.1:${port}`;
   });
+
 
   test('POST /auth/login returns token and user', async () => {
     const response = await request(app)
@@ -77,14 +84,16 @@ describe('API contract tests', () => {
     expect(response.status).toBe(200);
     expect(response.body.email).toBe('admin@example.com');
     expect(container.authService.getCurrentUser).toHaveBeenCalledWith('abc');
+
   });
 
-  test('GET /risks returns list of risks', async () => {
-    const response = await request(app).get('/risks');
+  it('serves an OpenAPI document', async () => {
+    const { response, body } = await request('/openapi.json');
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body[0].title).toBe('Risk');
+    expect(body.openapi).toBe('3.0.0');
+    expect(!!body.paths['/risks']).toBeTruthy();
   });
+
 
   test('GET /risks/summary returns aggregated metrics', async () => {
     const response = await request(app).get('/risks/summary');
