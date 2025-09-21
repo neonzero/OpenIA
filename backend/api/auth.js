@@ -5,8 +5,8 @@ function createAuthRouter({ authService }) {
 
   router.post('/login', async (req, res, next) => {
     try {
-      const token = await authService.login(req.body);
-      res.status(200).json(token);
+      const response = await authService.login(req.body);
+      res.status(200).json(response);
     } catch (error) {
       next(error);
     }
@@ -19,6 +19,25 @@ function createAuthRouter({ authService }) {
       res.status(200).json(refreshed);
     } catch (error) {
       error.status = 401;
+      next(error);
+    }
+  });
+
+  router.get('/me', async (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : authHeader;
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const user = await authService.getCurrentUser(token);
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      res.status(200).json(user);
+    } catch (error) {
       next(error);
     }
   });
